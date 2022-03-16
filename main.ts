@@ -302,6 +302,10 @@ async function main() {
     .name("gitlab-cli")
     .version("0.1.0")
     .description("Command line interface for gitlab")
+    .env(
+      "GITLAB_API_TOKEN=<value:string>",
+      "Gitlab api token that is used to commuicate with the API",
+    )
     .option(
       "-f, --force",
       "Use force push",
@@ -309,13 +313,23 @@ async function main() {
     )
     .command(
       "publish",
-      new Command().action((parmas) =>
+      new Command().description(
+        "Uploads new changes to merge request. " +
+          "A remote branch is created if it does not exist. " +
+          "A merge request is created if it does not exist. " +
+          "The merge request is marked as ready if it was a draft",
+      ).action((parmas) =>
         pushToMergeRequest({ draft: false, force: parmas.force })
       ),
     )
     .command(
       "draft",
-      new Command().action((params) =>
+      new Command().description(
+        "Uploads new changes to merge request. " +
+          "A remote branch is created if it does not exist. " +
+          "A merge request is created if it does not exist. " +
+          "The merge request is marked as a draf",
+      ).action((params) =>
         pushToMergeRequest({ draft: true, force: params.force })
       ),
     )
