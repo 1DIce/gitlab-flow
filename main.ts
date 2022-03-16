@@ -1,10 +1,33 @@
 import { Select } from "https://deno.land/x/cliffy@v0.20.1/prompt/mod.ts";
 import { Command } from "https://deno.land/x/cliffy@v0.20.1/command/mod.ts";
 
-const global = { remoteBaseUrl: "https://gitlab.com", projectId: "34076701" };
+interface ConfigFile {
+  remoteBaseUrl: string;
+  projectId: string;
+}
+
+let GLOBAL_CONFIG: ConfigFile = {
+  remoteBaseUrl: "",
+  projectId: "",
+};
 
 function getAccessToken(): string {
   return Deno.env.get("GITLAB_API_TOKEN") ?? "";
+}
+
+function getConfigHome():string{
+  const xdgHome = Deno.env.get("XDG_CONFIG_HOME")
+  return xdgHome ? xdgHome + "/gitlab-cli" : Deno.env.get("HOME") +"/.config/gitlab-cli"
+}
+
+function loadConfigFile(): void {
+  const path = getConfigHome() + "/gitlab-cli.json";
+  try {
+    const loaded = JSON.parse(Deno.readTextFileSync(path));
+    GLOBAL_CONFIG = { ...GLOBAL_CONFIG, ...loaded };
+  } catch (e) {
+    throw new Error("Failed to load config file: " + path, e);
+  }
 }
 
 async function runExternalCmd(
@@ -98,14 +121,14 @@ function createRemoteBranch(branchName: string) {
   ]);
 }
 
-function gitPush(force:boolean){
-      return runExternalCmd(force ? ["git", "push"] : ["git", "push", "--force"]);
+function gitPush(force: boolean) {
+  return runExternalCmd(force ? ["git", "push"] : ["git", "push", "--force"]);
 }
 
 async function projectApiRequest(url: string, config?: RequestInit) {
   const jsonResponse = await fetch(
     new Request(
-      global.remoteBaseUrl + "/api/v4/" + "projects/" + global.projectId + url,
+      GLOBAL_CONFIG.remoteBaseUrl + "/api/v4/" + "projects/" + GLOBAL_CONFIG.projectId + url,
       {
         headers: {
           Authorization: "Bearer " + getAccessToken(),
@@ -122,7 +145,7 @@ async function projectApiRequest(url: string, config?: RequestInit) {
 
 async function apiRequest(url: string, config?: RequestInit) {
   const jsonResponse = await fetch(
-    new Request(global.remoteBaseUrl + "/api/v4/" + url, {
+    new Request(GLOBAL_CONFIG.remoteBaseUrl + "/api/v4/" + url, {
       headers: { Authorization: "Bearer " + getAccessToken() },
       method: "GET",
       ...(config ?? {}),
@@ -159,7 +182,7 @@ async function selectReviewer(): Promise<string> {
   let availableReviewers: string[] = [];
   try {
     Deno.readTextFileSync(
-      Deno.env.get("XDG_HOME") + "/gitlab-cli/reviewers.txt",
+      getConfigHome() +"/reviewers.txt",
     )
       .split("\n")
       .map((name) => name.trim());
@@ -257,33 +280,42 @@ async function pushToMergeRequest(config: { draft: boolean; force: boolean }) {
 
   if (!mr) {
     // get default labels
-    await gitPush(config.force)
+    await gitPush(config.force);
     mr = await createMergeRequest(remoteBranch, config);
   } else {
     await setDraft(config.draft, mr.iid, mr.title);
-    await gitPush(config.force)
+    await gitPush(config.force);
   }
 }
 
-await new Command()
-  .name("gitlab-cli")
-  .version("0.1.0")
-  .description("Command line interface for gitlab")
-  .option(
-    "-f, --force [val:boolean]",
-    "Use force push",
-    { global: true },
-  )
-  .command(
-    "publish",
-    new Command().action((parmas) =>
-      pushToMergeRequest({ draft: false, force: parmas.force })
-    ),
-  )
-  .command(
-    "draft",
-    new Command().action((params) =>
-      pushToMergeRequest({ draft: true, force: params.force })
-    ),
-  )
-  .parse(Deno.args);
+/****************************/
+/*          MAIN            */
+/****************************/
+async function main() {
+  loadConfigFile();
+
+  await new Command()
+    .name("gitlab-cli")
+    .version("0.1.0")
+    .description("Command line interface for gitlab")
+    .option(
+      "-f, --force",
+      "Use force push",
+      { global: true },
+    )
+    .command(
+      "publish",
+      new Command().action((parmas) =>
+        pushToMergeRequest({ draft: false, force: parmas.force })
+      ),
+    )
+    .command(
+      "draft",
+      new Command().action((params) =>
+        pushToMergeRequest({ draft: true, force: params.force })
+      ),
+    )
+    .parse(Deno.args);
+}
+
+main();
