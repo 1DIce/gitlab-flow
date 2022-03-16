@@ -4,10 +4,10 @@ Small personal project to automate my gitlab workflow using [deno](https://deno.
 
 ## Installation
 
-Use [deno](https://deno.land/) to install gitlab-cli. Make sure that `$DENO_INSTALL/bin` is in your PATH.
+Use [deno](https://deno.land/) to install gitlab-cli. Make sure that `$HOME/.deno` is in your PATH.
 
 ```bash
-deno install https://github.com/1DIce/gitlab-cli
+deno install --allow-run --allow-env --allow-net --allow-read --unstable --no-check https://raw.githubusercontent.com/1DIce/gitlab-cli/main/gitlab-cli.ts
 ```
 
 ## Usage
