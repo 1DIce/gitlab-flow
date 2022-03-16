@@ -1,3 +1,4 @@
+#! /usr/bin/env -S deno run --allow-run --allow-env --allow-net --allow-read --unstable --no-check
 import { Select } from "https://deno.land/x/cliffy@v0.20.1/prompt/mod.ts";
 import { Command } from "https://deno.land/x/cliffy@v0.20.1/command/mod.ts";
 
@@ -15,9 +16,11 @@ function getAccessToken(): string {
   return Deno.env.get("GITLAB_API_TOKEN") ?? "";
 }
 
-function getConfigHome():string{
-  const xdgHome = Deno.env.get("XDG_CONFIG_HOME")
-  return xdgHome ? xdgHome + "/gitlab-cli" : Deno.env.get("HOME") +"/.config/gitlab-cli"
+function getConfigHome(): string {
+  const xdgHome = Deno.env.get("XDG_CONFIG_HOME");
+  return xdgHome
+    ? xdgHome + "/gitlab-cli"
+    : Deno.env.get("HOME") + "/.config/gitlab-cli";
 }
 
 function loadConfigFile(): void {
@@ -128,7 +131,8 @@ function gitPush(force: boolean) {
 async function projectApiRequest(url: string, config?: RequestInit) {
   const jsonResponse = await fetch(
     new Request(
-      GLOBAL_CONFIG.remoteBaseUrl + "/api/v4/" + "projects/" + GLOBAL_CONFIG.projectId + url,
+      GLOBAL_CONFIG.remoteBaseUrl + "/api/v4/" + "projects/" +
+        GLOBAL_CONFIG.projectId + url,
       {
         headers: {
           Authorization: "Bearer " + getAccessToken(),
@@ -182,7 +186,7 @@ async function selectReviewer(): Promise<string> {
   let availableReviewers: string[] = [];
   try {
     Deno.readTextFileSync(
-      getConfigHome() +"/reviewers.txt",
+      getConfigHome() + "/reviewers.txt",
     )
       .split("\n")
       .map((name) => name.trim());
