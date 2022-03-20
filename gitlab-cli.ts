@@ -1,6 +1,9 @@
 #! /usr/bin/env -S deno run --allow-run --allow-env --allow-net --allow-read --unstable --no-check
+
 import { Select } from "https://deno.land/x/cliffy@v0.20.1/prompt/mod.ts";
 import { Command } from "https://deno.land/x/cliffy@v0.20.1/command/mod.ts";
+import { crypto } from "https://deno.land/std@0.130.0/crypto/mod.ts";
+import * as Path from "https://deno.land/std@0.130.0/path/mod.ts";
 
 interface ConfigFile {
   remoteBaseUrl: string;
@@ -31,6 +34,13 @@ function loadConfigFile(): void {
   } catch (e) {
     throw new Error("Failed to load config file: " + path, e);
   }
+}
+
+function toHexString(bytes: ArrayBuffer): string {
+  return new Uint8Array(bytes).reduce(
+    (str, byte) => str + byte.toString(16).padStart(2, "0"),
+    "",
+  );
 }
 
 async function runExternalCmd(
@@ -68,50 +78,54 @@ async function runExternalCmd(
   }
 }
 
-function getRemoteBranch(): Promise<string | undefined | void> {
-  return runExternalCmd([
+async function getGitRoot() {
+  const resp = await runExternalCmd(["git", "rev-parse", "--show-toplevel"]);
+  return resp.success ? resp.stdout.trim() : undefined;
+}
+async function getRemoteBranch(): Promise<string | undefined | void> {
+  const result = await runExternalCmd([
     "git",
     "rev-parse",
     "--symbolic-full-name",
     "--abbrev-ref",
     "HEAD@{u}",
-  ]).then((result) => {
-    return result.success
-      ? result.stdout.replace("origin/", "").trim()
-      : undefined;
-  });
+  ]);
+  return result.success
+    ? result.stdout.replace("origin/", "").trim()
+    : undefined;
 }
 
-function getLocalBranch(): Promise<string | undefined | void> {
-  return runExternalCmd([
+async function getLocalBranch(): Promise<string | undefined | void> {
+  const result = await runExternalCmd([
     "git",
     "rev-parse",
     "--symbolic-full-name",
     "--abbrev-ref",
     "HEAD",
-  ]).then((result) => {
-    return result.success ? result.stdout.trim() : undefined;
-  });
+  ]);
+  return result.success ? result.stdout.trim() : undefined;
 }
 
-function getCommitTitle(): Promise<string | void> {
-  return runExternalCmd([
+async function getCommitTitle(): Promise<string | void> {
+  const result = await runExternalCmd([
     "git",
     "show",
     "--pretty=format:%s",
     "-s",
     "HEAD",
-  ]).then((result) => (result.success ? result.stdout.trim() : ""));
+  ]);
+  return (result.success ? result.stdout.trim() : "");
 }
 
-function getCommitMessageBody(): Promise<string | void> {
-  return runExternalCmd([
+async function getCommitMessageBody(): Promise<string | void> {
+  const result = await runExternalCmd([
     "git",
     "show",
     "--pretty=format:%b",
     "-s",
     "HEAD",
-  ]).then((result) => (result.success ? result.stdout : ""));
+  ]);
+  return (result.success ? result.stdout : "");
 }
 
 function createRemoteBranch(branchName: string) {
@@ -264,6 +278,20 @@ async function createMergeRequest(
   return response;
 }
 
+async function getMergeRequestForCurrentBranch() {
+  const remoteBranch = await getRemoteBranch();
+  if (remoteBranch) {
+    const mrs = await fetchOpenMergeRequestForBranch(remoteBranch);
+
+    if (mrs?.length > 1) {
+      throw new Error("Multiple merge requests found");
+    }
+    let mr = mrs?.[0];
+    return mr;
+  }
+  return undefined;
+}
+
 async function pushToMergeRequest(config: { draft: boolean; force: boolean }) {
   await runExternalCmd(["git", "fetch"]);
   const localBranch = (await getLocalBranch()) ?? "";
@@ -290,6 +318,30 @@ async function pushToMergeRequest(config: { draft: boolean; force: boolean }) {
     await setDraft(config.draft, mr.iid, mr.title);
     await gitPush(config.force);
   }
+}
+
+async function getRemoteFileChangeUrl(filePath: string) {
+  const gitRoot = await getGitRoot();
+  if (!gitRoot) {
+    throw new Error("Not inside a git repository");
+  }
+  const absoluteFilePath = Path.resolve(filePath);
+  const gitRootParts = gitRoot.split("/");
+  const relativeFilePathToGitRoot = absoluteFilePath.split("/").filter(
+    (segment, index) => gitRootParts[index] !== segment,
+  ).join("/");
+  const mrUrl = (await getMergeRequestForCurrentBranch())?.web_url;
+  const filePathHash = toHexString(crypto.subtle.digestSync(
+    "SHA-1",
+    new TextEncoder().encode(relativeFilePathToGitRoot),
+  ));
+  const changeUrl = mrUrl + "/diffs#" + filePathHash;
+  return changeUrl;
+}
+
+async function stdoutRemoteFileChangeUrl(filePath: string) {
+  const changeUrl = await getRemoteFileChangeUrl(filePath);
+  console.log(changeUrl);
 }
 
 /****************************/
@@ -332,6 +384,11 @@ async function main() {
       ).action((params) =>
         pushToMergeRequest({ draft: true, force: params.force })
       ),
+    ).command(
+      "file-change <file_path:string>",
+      new Command().description(
+        "Get url to change of the provided file in the open merge request",
+      ).action((params, filePath) => stdoutRemoteFileChangeUrl(filePath)),
     )
     .parse(Deno.args);
 }
