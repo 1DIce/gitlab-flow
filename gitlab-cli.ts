@@ -344,6 +344,12 @@ async function stdoutRemoteFileChangeUrl(filePath: string) {
   console.log(changeUrl);
 }
 
+async function stdoutTargetBranch() {
+  const targetBranch =
+    (await getMergeRequestForCurrentBranch())?.target_branch ?? "";
+  console.log(targetBranch);
+}
+
 /****************************/
 /*          MAIN            */
 /****************************/
@@ -389,8 +395,14 @@ async function main() {
       new Command().description(
         "Get url to change of the provided file in the open merge request",
       ).action((params, filePath) => stdoutRemoteFileChangeUrl(filePath)),
+    ).command(
+      "target",
+      new Command().description(
+        "Get merge request target branch",
+      ).action((params) => stdoutTargetBranch()),
     )
     .parse(Deno.args);
 }
 
 main();
+
