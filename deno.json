@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "install":  "deno install --allow-run --allow-env --allow-net --allow-read --unstable --no-check -f ./gitlab-cli.ts"
+  }
+}
