@@ -1,6 +1,6 @@
 #! /usr/bin/env -S deno run --allow-run --allow-env --allow-net --allow-read --unstable --no-check
 
-import { Command, Select } from "./dependencies/cliffy.deps.ts";
+import { Command, Select, Toggle } from "./dependencies/cliffy.deps.ts";
 import { crypto, Path } from "./dependencies/std.deps.ts";
 import { ConfigFileReader } from "./src/config-file-reader.ts";
 import { GlobalConfig } from "./src/config.ts";
@@ -223,6 +223,16 @@ function getDefaultLabels(): string[] {
   return GLOBAL_CONFIG.defaultLabels ?? [""];
 }
 
+async function getSquashCommitsFlag(): Promise<boolean> {
+  const squashCommits: boolean = await Toggle.prompt(
+    {
+      message: "Squash commits when merge request is accepted?",
+      default: true,
+    },
+  );
+  return squashCommits;
+}
+
 async function getCurrentUserId() {
   const currentUser = await apiRequest("user");
   return (currentUser?.id as string) ?? "";
@@ -268,7 +278,7 @@ async function createMergeRequest(
       assignee_id: await getCurrentUserId(),
       labels: getDefaultLabels(),
       remove_source_branch: true,
-      squash: true, // TODO select
+      squash: await getSquashCommitsFlag(),
     }),
   });
   return response;
@@ -402,4 +412,3 @@ async function main() {
 }
 
 main();
-
