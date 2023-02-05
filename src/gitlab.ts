@@ -1,7 +1,6 @@
-import { Select, Toggle } from "./dependencies/cliffy.deps.ts";
-import { crypto, Path } from "./dependencies/std.deps.ts";
-import { getConfig } from "./src/config.ts";
-import { FileSystem } from "./src/file-system.ts";
+import { Select, Toggle } from "../dependencies/cliffy.deps.ts";
+import { crypto, Path } from "../dependencies/std.deps.ts";
+import { getConfig } from "../src/config.ts";
 
 function getAccessToken(): string {
   return getConfig().gitlabApiToken ?? Deno.env.get("GITLAB_API_TOKEN") ?? "";

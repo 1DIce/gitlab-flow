@@ -1,5 +1,7 @@
 {
   "tasks": {
-    "install":  "deno install --allow-run --allow-env --allow-net --allow-read --unstable --no-check -f ./gitlab-cli.ts"
-  }
+    "install": "deno install --allow-run --allow-env --allow-net --allow-read --unstable --no-check -f ./gitlab-cli.ts"
+  },
+
+  "lint": { "rules": { "exclude": ["no-explicit-any"] } }
 }
