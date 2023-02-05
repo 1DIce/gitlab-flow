@@ -1,20 +1,10 @@
-#! /usr/bin/env -S deno run --allow-run --allow-env --allow-net --allow-read --no-check
-
-import { Command, Select, Toggle } from "./dependencies/cliffy.deps.ts";
+import { Select, Toggle } from "./dependencies/cliffy.deps.ts";
 import { crypto, Path } from "./dependencies/std.deps.ts";
-import { ConfigFileReader } from "./src/config-file-reader.ts";
-import { GlobalConfig } from "./src/config.ts";
+import { getConfig } from "./src/config.ts";
 import { FileSystem } from "./src/file-system.ts";
 
-let GLOBAL_CONFIG: GlobalConfig = {
-  remoteBaseUrl: "",
-  projectId: "",
-};
-
-const fs = new FileSystem();
-
 function getAccessToken(): string {
-  return GLOBAL_CONFIG.gitlabApiToken ?? Deno.env.get("GITLAB_API_TOKEN") ?? "";
+  return getConfig().gitlabApiToken ?? Deno.env.get("GITLAB_API_TOKEN") ?? "";
 }
 
 function toHexString(bytes: ArrayBuffer): string {
@@ -126,8 +116,8 @@ function gitPush(force: boolean) {
 async function projectApiRequest(url: string, config?: RequestInit) {
   const jsonResponse = await fetch(
     new Request(
-      GLOBAL_CONFIG.remoteBaseUrl + "/api/v4/" + "projects/" +
-        GLOBAL_CONFIG.projectId + url,
+      getConfig().remoteBaseUrl + "/api/v4/" + "projects/" +
+        getConfig().projectId + url,
       {
         headers: {
           Authorization: "Bearer " + getAccessToken(),
@@ -144,7 +134,7 @@ async function projectApiRequest(url: string, config?: RequestInit) {
 
 async function apiRequest(url: string, config?: RequestInit) {
   const jsonResponse = await fetch(
-    new Request(GLOBAL_CONFIG.remoteBaseUrl + "/api/v4/" + url, {
+    new Request(getConfig().remoteBaseUrl + "/api/v4/" + url, {
       headers: { Authorization: "Bearer " + getAccessToken() },
       method: "GET",
       ...(config ?? {}),
@@ -170,21 +160,25 @@ async function fetchAllRemoteBranchNames(): Promise<string[]> {
   return branches.map((branch: { name: string }) => branch.name.trim());
 }
 
-async function selectTargetBranch() {
-  const availableBranches = GLOBAL_CONFIG.defaultTargetBranches?.length
-    ? GLOBAL_CONFIG.defaultTargetBranches
+async function selectTargetBranch(): Promise<string | undefined> {
+  const availableBranches = getConfig().defaultTargetBranches?.length
+    ? getConfig().defaultTargetBranches
     : await fetchAllRemoteBranchNames();
 
-  const targetBranch: string = await Select.prompt({
-    message: `Choose a target branch`,
-    options: availableBranches,
-    search: true,
-  });
-  return targetBranch;
+  if (availableBranches != null && availableBranches.length > 0) {
+    const targetBranch: string = await Select.prompt({
+      message: `Choose a target branch`,
+      options: availableBranches,
+      search: true,
+    });
+    return targetBranch;
+  } else {
+    return undefined;
+  }
 }
 
 function getAvailableReviewers(): string[] {
-  const availableReviewers = GLOBAL_CONFIG.reviewers ?? [];
+  const availableReviewers = getConfig().reviewers ?? [];
 
   if (
     !Array.isArray(availableReviewers) ||
@@ -220,7 +214,7 @@ async function selectReviewer(): Promise<string> {
 }
 
 function getDefaultLabels(): string[] {
-  return GLOBAL_CONFIG.defaultLabels ?? [""];
+  return getConfig().defaultLabels ?? [""];
 }
 
 async function getSquashCommitsFlag(): Promise<boolean> {
@@ -267,11 +261,18 @@ async function createMergeRequest(
   const reviewerId = await selectReviewer();
   const title = (config.draft ? "Draft: " : "") + (await getCommitTitle() ??
     "");
+  const targetBranch = await selectTargetBranch();
+  if (!targetBranch) {
+    throw new Error(
+      "No target branch was selected. It is not possible to create a merge" +
+        "request without a target branch",
+    );
+  }
   const response = await projectApiRequest("/merge_requests", {
     method: "POST",
     body: JSON.stringify({
       source_branch,
-      target_branch: await selectTargetBranch(),
+      target_branch: targetBranch,
       title,
       description: (await getCommitMessageBody()) ?? "",
       reviewer_ids: [reviewerId] || [],
@@ -298,7 +299,9 @@ async function getMergeRequestForCurrentBranch() {
   return undefined;
 }
 
-async function pushToMergeRequest(config: { draft: boolean; force: boolean }) {
+export async function pushToMergeRequest(
+  config: { draft: boolean; force: boolean },
+) {
   await runExternalCmd(["git", "fetch"]);
   const localBranch = (await getLocalBranch()) ?? "";
   let remoteBranch = await getRemoteBranch();
@@ -346,74 +349,13 @@ async function getRemoteFileChangeUrl(filePath: string) {
   return changeUrl;
 }
 
-async function stdoutRemoteFileChangeUrl(filePath: string) {
+export async function stdoutRemoteFileChangeUrl(filePath: string) {
   const changeUrl = await getRemoteFileChangeUrl(filePath);
   console.log(changeUrl);
 }
 
-async function stdoutTargetBranch() {
+export async function stdoutTargetBranch() {
   const targetBranch =
     (await getMergeRequestForCurrentBranch())?.target_branch ?? "";
   console.log(targetBranch);
 }
-
-/****************************/
-/*          MAIN            */
-/****************************/
-async function main() {
-  const configFile = new ConfigFileReader(fs).loadConfigFile();
-  if (!configFile) {
-    console.error("Error: No configuration file was found!");
-    Deno.exit(1);
-  }
-  GLOBAL_CONFIG = configFile;
-
-  await new Command()
-    .name("gitlab-cli")
-    .version("0.1.0")
-    .description("Command line interface for gitlab")
-    .env(
-      "GITLAB_API_TOKEN=<value:string>",
-      "Gitlab api token that is used to communicate with the API",
-    )
-    .option(
-      "-f, --force",
-      "Use force push",
-      { global: true },
-    )
-    .command(
-      "publish",
-      new Command().description(
-        "Uploads new changes to merge request. " +
-          "A remote branch is created if it does not exist. " +
-          "A merge request is created if it does not exist. " +
-          "The merge request is marked as ready if it was a draft",
-      ).action((params) =>
-        pushToMergeRequest({ draft: false, force: params.force })
-      ),
-    )
-    .command(
-      "draft",
-      new Command().description(
-        "Uploads new changes to merge request. " +
-          "A remote branch is created if it does not exist. " +
-          "A merge request is created if it does not exist. " +
-          "The merge request is marked as a draft",
-      ).action((params) =>
-        pushToMergeRequest({ draft: true, force: params.force })
-      ),
-    ).command(
-      "file-change <file_path:string>",
-      new Command().description(
-        "Get url to change of the provided file in the open merge request",
-      ).action((params, filePath) => stdoutRemoteFileChangeUrl(filePath)),
-    ).command(
-      "target",
-      new Command().description(
-        "Get merge request target branch",
-      ).action((params) => stdoutTargetBranch()),
-    )
-    .parse(Deno.args);
-}
-
-main();
