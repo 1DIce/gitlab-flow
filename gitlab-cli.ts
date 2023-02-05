@@ -1,4 +1,4 @@
-#! /usr/bin/env -S deno run --allow-run --allow-env --allow-net --allow-read --unstable --no-check
+#! /usr/bin/env -S deno run --allow-run --allow-env --allow-net --allow-read --no-check
 
 import { Command, Select, Toggle } from "./dependencies/cliffy.deps.ts";
 import { crypto, Path } from "./dependencies/std.deps.ts";
