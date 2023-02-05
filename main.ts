@@ -8,7 +8,7 @@ import {
   pushToMergeRequest,
   stdoutRemoteFileChangeUrl,
   stdoutTargetBranch,
-} from "./src/gitlab-cli.ts";
+} from "./src/gitlab.ts";
 import { environment } from "./environment.ts";
 
 const fs = new FileSystem();
