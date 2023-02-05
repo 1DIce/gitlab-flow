@@ -361,7 +361,12 @@ async function stdoutTargetBranch() {
 /*          MAIN            */
 /****************************/
 async function main() {
-  GLOBAL_CONFIG = new ConfigFileReader(fs).loadConfigFile();
+  const configFile = new ConfigFileReader(fs).loadConfigFile();
+  if (!configFile) {
+    console.error("Error: No configuration file was found!");
+    Deno.exit(1);
+  }
+  GLOBAL_CONFIG = configFile;
 
   await new Command()
     .name("gitlab-cli")

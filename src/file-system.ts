@@ -8,4 +8,8 @@ export class FileSystem {
   readTextFileSync(path: string | URL) {
     return Deno.readTextFileSync(path);
   }
+
+  isFileSync(path: string | URL): boolean {
+    return Deno.statSync(path).isFile;
+  }
 }

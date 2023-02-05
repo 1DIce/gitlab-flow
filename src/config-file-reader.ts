@@ -5,14 +5,17 @@ import { FileSystem } from "./file-system.ts";
 export class ConfigFileReader {
   constructor(private readonly fs: FileSystem) {}
 
-  public loadConfigFile(): GlobalConfig {
+  public loadConfigFile(): GlobalConfig | undefined {
     const path = this.findConfigFilePath();
-    try {
-      const loadedConfig = JSON.parse(this.fs.readTextFileSync(path));
-      return loadedConfig;
-    } catch (e) {
-      throw new Error("Failed to load config file: " + path, e);
+    if (path) {
+      try {
+        const loadedConfig = JSON.parse(this.fs.readTextFileSync(path));
+        return loadedConfig;
+      } catch (e) {
+        throw new Error("Failed to load config file: " + path, e);
+      }
     }
+    return undefined;
   }
 
   private isConfigFile(fileName: string): boolean {
@@ -30,7 +33,7 @@ export class ConfigFileReader {
     return path === "/";
   }
 
-  private findConfigFilePath(): string {
+  private findConfigFilePath(): string | undefined {
     let currentSearchDirectory = Path.resolve(".");
 
     while (currentSearchDirectory) {
@@ -46,7 +49,13 @@ export class ConfigFileReader {
       currentSearchDirectory = Path.dirname(currentSearchDirectory);
     }
 
-    return this.getConfigHomePath() + "/gitlab-cli.json";
+    const userHomeConfigPath = this.getConfigHomePath() + "/gitlab-cli.json";
+    if (this.fs.isFileSync(userHomeConfigPath)) {
+      return userHomeConfigPath;
+    }
+
+    // no config file found
+    return undefined;
   }
 
   private findConfigFileInDirectory(directory: string): string {
