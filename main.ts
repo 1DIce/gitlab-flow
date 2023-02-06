@@ -51,12 +51,20 @@ async function main() {
     .option(
       "-p, --publish",
       "The merge request is marked as ready",
-      { default: false },
+      { conflicts: ["draft"] },
+    )
+    .option(
+      "-d, --draft",
+      "The merge request is marked as draft",
+      { conflicts: ["publish"] },
     )
     .action(
       (params) => {
         initializeConfig();
-        pushToMergeRequest({ draft: !params.publish, force: params.force });
+        pushToMergeRequest({
+          draft: params.draft != null ? params.draft : !params.publish,
+          force: params.force,
+        });
       },
     )
     .reset()
