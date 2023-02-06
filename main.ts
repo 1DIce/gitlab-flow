@@ -3,7 +3,7 @@
 import { replaceConfig } from "./src/config.ts";
 import { ConfigFileReader } from "./src/config-file-reader.ts";
 import { FileSystem } from "./src/file-system.ts";
-import { Command } from "./dependencies/cliffy.deps.ts";
+import { Command, HelpCommand } from "./dependencies/cliffy.deps.ts";
 import {
   pushToMergeRequest,
   stdoutRemoteFileChangeUrl,
@@ -25,8 +25,9 @@ function initializeConfig(): void {
 async function main() {
   await new Command()
     .name(environment.binaryName)
-    .usage("<command>")
+    .usage("<command> [options]")
     .version(environment.version)
+    .meta("deno", Deno.version.deno)
     .description("Command line interface for gitlab merge request workflows")
     .env(
       "GITLAB_API_TOKEN=<value:string>",
@@ -38,7 +39,7 @@ async function main() {
       { global: true, default: false },
     )
     .command(
-      "create",
+      "create [options]",
     )
     .alias("c")
     .description(
@@ -90,6 +91,7 @@ async function main() {
       initializeConfig();
       stdoutTargetBranch();
     })
+    .command("help", new HelpCommand().global())
     .parse(Deno.args);
 }
 
