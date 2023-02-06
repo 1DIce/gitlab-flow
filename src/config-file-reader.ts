@@ -6,8 +6,8 @@ import { environment } from "../environment.ts";
 const CONFIG_FILE_NAME = [
   `.${environment.binaryName}.json`,
   `${environment.binaryName}.json`,
-  ".gitlab-flow.json",
-  "gitlab-flow.json",
+  ".gitlab-mr.json",
+  "gitlab-mr.json",
 ] as const;
 
 export class ConfigFileReader {
