@@ -3,12 +3,12 @@ import { crypto, Path } from "../dependencies/std.deps.ts";
 import { getConfig } from "../src/config.ts";
 import { cmd } from "./cmd.ts";
 import { Git } from "./git.ts";
+import { GitlabApi } from "./gitlab-api.ts";
+import { CreateMergeRequestRequest } from "./gitlab-api.types.ts";
 
 const git = new Git();
 
-function getAccessToken(): string {
-  return getConfig().gitlabApiToken ?? Deno.env.get("GITLAB_API_TOKEN") ?? "";
-}
+const api = new GitlabApi();
 
 function toHexString(bytes: ArrayBuffer): string {
   return new Uint8Array(bytes).reduce(
@@ -17,57 +17,10 @@ function toHexString(bytes: ArrayBuffer): string {
   );
 }
 
-async function projectApiRequest(url: string, config?: RequestInit) {
-  const jsonResponse = await fetch(
-    new Request(
-      getConfig().remoteBaseUrl + "/api/v4/" + "projects/" +
-        getConfig().projectId + url,
-      {
-        headers: {
-          Authorization: "Bearer " + getAccessToken(),
-          "Content-Type": "application/json",
-        },
-        method: "GET",
-        ...config,
-      },
-    ),
-  );
-  const jsonData = await jsonResponse.json();
-  return jsonData;
-}
-
-async function apiRequest(url: string, config?: RequestInit) {
-  const jsonResponse = await fetch(
-    new Request(getConfig().remoteBaseUrl + "/api/v4/" + url, {
-      headers: { Authorization: "Bearer " + getAccessToken() },
-      method: "GET",
-      ...(config ?? {}),
-    }),
-  );
-  const jsonData = await jsonResponse.json();
-  return jsonData;
-}
-
-function fetchOpenMergeRequestForBranch(branchName: string): Promise<any[]> {
-  return projectApiRequest(
-    "/merge_requests?state=opened&source_branch=" + branchName,
-  );
-}
-
-async function fetchProjectLabels(): Promise<string[]> {
-  const labels = await projectApiRequest("/labels") ?? [];
-  return labels.map((label: { name: string }) => label.name);
-}
-
-async function fetchAllRemoteBranchNames(): Promise<string[]> {
-  const branches = await projectApiRequest("/repository/branches") ?? [];
-  return branches.map((branch: { name: string }) => branch.name.trim());
-}
-
 async function selectTargetBranch(): Promise<string | undefined> {
   const availableBranches = getConfig().defaultTargetBranches?.length
     ? getConfig().defaultTargetBranches
-    : await fetchAllRemoteBranchNames();
+    : await api.fetchAllRemoteBranchNames();
 
   if (availableBranches != null && availableBranches.length > 0) {
     const targetBranch: string = await Select.prompt({
@@ -110,7 +63,7 @@ async function selectReviewer(): Promise<string> {
     return "";
   }
 
-  const reviewerUser = await apiRequest("users?username=" + reviewer);
+  const reviewerUser = await api.findUsersByName(reviewer);
   if (reviewerUser?.length > 1) {
     throw new Error("multiple user with name " + reviewer + " found!");
   }
@@ -132,29 +85,17 @@ async function getSquashCommitsFlag(): Promise<boolean> {
 }
 
 async function getCurrentUserId() {
-  const currentUser = await apiRequest("user");
+  const currentUser = await api.getCurrentUser();
   return (currentUser?.id as string) ?? "";
-}
-
-interface UpdateMrBody {
-  title?: string;
-}
-
-async function updateMergeRequest(mrIid: number, body: UpdateMrBody) {
-  const response = await projectApiRequest("/merge_requests/" + mrIid, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
-  return response;
 }
 
 async function setDraft(draft: boolean, mrIid: number, oldTitle: string) {
   if (oldTitle.trim().startsWith("Draft: ") && draft === false) {
-    await updateMergeRequest(mrIid, {
+    await api.updateMergeRequest(mrIid, {
       title: oldTitle.trim().replace("Draft: ", ""),
     });
   } else if (!oldTitle.trim().startsWith("Draft: ") && draft) {
-    await updateMergeRequest(mrIid, { title: "Draft: " + oldTitle });
+    await api.updateMergeRequest(mrIid, { title: "Draft: " + oldTitle });
   }
 }
 
@@ -172,27 +113,25 @@ async function createMergeRequest(
         "request without a target branch",
     );
   }
-  const response = await projectApiRequest("/merge_requests", {
-    method: "POST",
-    body: JSON.stringify({
-      source_branch,
-      target_branch: targetBranch,
-      title,
-      description: (await git.getCommitMessageBody()) ?? "",
-      reviewer_ids: [reviewerId] || [],
-      assignee_id: await getCurrentUserId(),
-      labels: getDefaultLabels(),
-      remove_source_branch: true,
-      squash: await getSquashCommitsFlag(),
-    }),
-  });
-  return response;
+
+  const body: CreateMergeRequestRequest = {
+    source_branch,
+    target_branch: targetBranch,
+    title,
+    description: (await git.getCommitMessageBody()) ?? "",
+    reviewer_ids: [reviewerId] || [],
+    assignee_id: await getCurrentUserId(),
+    labels: getDefaultLabels(),
+    remove_source_branch: true,
+    squash: await getSquashCommitsFlag(),
+  };
+  return await api.createMergeRequest(body);
 }
 
 async function getMergeRequestForCurrentBranch() {
   const remoteBranch = await git.getRemoteBranch();
   if (remoteBranch) {
-    const mrs = await fetchOpenMergeRequestForBranch(remoteBranch);
+    const mrs = await api.fetchOpenMergeRequestForBranch(remoteBranch);
 
     if (mrs?.length > 1) {
       throw new Error("Multiple merge requests found");
@@ -216,7 +155,7 @@ export async function pushToMergeRequest(
     // TODO force ??
   }
 
-  const mrs = await fetchOpenMergeRequestForBranch(remoteBranch);
+  const mrs = await api.fetchOpenMergeRequestForBranch(remoteBranch);
 
   if (mrs?.length > 1) {
     throw new Error("Multiple merge requests found");
