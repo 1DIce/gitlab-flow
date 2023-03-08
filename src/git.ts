@@ -1,12 +1,16 @@
 import { cmd, CmdResult } from "./cmd.ts";
 
 export class Git {
-  async getGitRoot() {
+  fetch(): Promise<CmdResult> {
+    return cmd(["git", "fetch"]);
+  }
+
+  async getGitRoot(): Promise<string | undefined> {
     const resp = await cmd(["git", "rev-parse", "--show-toplevel"]);
     return resp.success ? resp.stdout.trim() : undefined;
   }
 
-  async getRemoteBranch(): Promise<string | undefined | void> {
+  async getRemoteBranch(): Promise<string | undefined> {
     const result = await cmd([
       "git",
       "rev-parse",
@@ -14,12 +18,10 @@ export class Git {
       "--abbrev-ref",
       "HEAD@{u}",
     ]);
-    return result.success
-      ? result.stdout.replace("origin/", "").trim()
-      : undefined;
+    return result.success ? result.stdout.trim() : undefined;
   }
 
-  async getLocalBranch(): Promise<string | undefined | void> {
+  async getLocalBranch(): Promise<string | undefined> {
     const result = await cmd([
       "git",
       "rev-parse",
@@ -30,7 +32,7 @@ export class Git {
     return result.success ? result.stdout.trim() : undefined;
   }
 
-  async getCommitTitle(): Promise<string | void> {
+  async getCommitTitle(): Promise<string> {
     const result = await cmd([
       "git",
       "show",
@@ -41,7 +43,7 @@ export class Git {
     return (result.success ? result.stdout.trim() : "");
   }
 
-  async getCommitMessageBody(): Promise<string | void> {
+  async getCommitMessageBody(): Promise<string> {
     const result = await cmd([
       "git",
       "show",
@@ -62,7 +64,7 @@ export class Git {
     ]);
   }
 
-  gitPush(force: boolean) {
+  gitPush(force: boolean): Promise<CmdResult> {
     return cmd(force ? ["git", "push"] : ["git", "push", "--force"]);
   }
 }

@@ -1,7 +1,6 @@
 import { Select, Toggle } from "../dependencies/cliffy.deps.ts";
 import { crypto, Path } from "../dependencies/std.deps.ts";
 import { getConfig } from "../src/config.ts";
-import { cmd } from "./cmd.ts";
 import { Git } from "./git.ts";
 import { GitlabApi } from "./gitlab-api.ts";
 import { CreateMergeRequestRequest } from "./gitlab-api.types.ts";
@@ -86,7 +85,7 @@ async function getSquashCommitsFlag(): Promise<boolean> {
 
 async function getCurrentUserId() {
   const currentUser = await api.getCurrentUser();
-  return (currentUser?.id as string) ?? "";
+  return currentUser?.id ?? "";
 }
 
 async function setDraft(draft: boolean, mrIid: number, oldTitle: string) {
@@ -128,8 +127,13 @@ async function createMergeRequest(
   return await api.createMergeRequest(body);
 }
 
-async function getMergeRequestForCurrentBranch() {
+async function getRemoteBranchWithoutPrefix(): Promise<string | undefined> {
   const remoteBranch = await git.getRemoteBranch();
+  return remoteBranch?.replace("origin/", "");
+}
+
+async function getMergeRequestForCurrentBranch() {
+  const remoteBranch = await getRemoteBranchWithoutPrefix();
   if (remoteBranch) {
     const mrs = await api.fetchOpenMergeRequestForBranch(remoteBranch);
 
@@ -145,9 +149,9 @@ async function getMergeRequestForCurrentBranch() {
 export async function pushToMergeRequest(
   config: { draft: boolean; force: boolean },
 ) {
-  await cmd(["git", "fetch"]);
+  await git.fetch();
   const localBranch = (await git.getLocalBranch()) ?? "";
-  let remoteBranch = await git.getRemoteBranch();
+  let remoteBranch = await getRemoteBranchWithoutPrefix();
   if (!remoteBranch) {
     await git.createRemoteBranch(localBranch);
     remoteBranch = localBranch;
