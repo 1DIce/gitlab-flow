@@ -4,14 +4,14 @@ import { replaceConfig } from "./src/config.ts";
 import { ConfigFileReader } from "./src/config-file-reader.ts";
 import { FileSystem } from "./src/file-system.ts";
 import { Command, HelpCommand } from "./dependencies/cliffy.deps.ts";
-import {
-  pushToMergeRequest,
-  stdoutRemoteFileChangeUrl,
-  stdoutTargetBranch,
-} from "./src/gitlab.ts";
+import { Actions } from "./src/actions.ts";
 import { environment } from "./environment.ts";
+import { GitlabApi } from "./src/gitlab-api.ts";
 
 const fs = new FileSystem();
+const git = new Git();
+const api = new GitlabApi();
+const actions = new Actions(git, api);
 
 function initializeConfig(): void {
   const configFile = new ConfigFileReader(fs).loadConfigFile();
@@ -62,7 +62,7 @@ async function main() {
     .action(
       (params) => {
         initializeConfig();
-        pushToMergeRequest({
+        actions.pushToMergeRequest({
           draft: params.draft != null ? params.draft : !params.publish,
           force: params.force,
         });
@@ -78,7 +78,7 @@ async function main() {
     )
     .action((_params, file_path) => {
       initializeConfig();
-      stdoutRemoteFileChangeUrl(file_path);
+      actions.stdoutRemoteFileChangeUrl(file_path);
     })
     .reset()
     .command(
@@ -89,7 +89,7 @@ async function main() {
     )
     .action((_params) => {
       initializeConfig();
-      stdoutTargetBranch();
+      actions.stdoutTargetBranch();
     })
     .command("help", new HelpCommand().global())
     .parse(Deno.args);
