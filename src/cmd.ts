@@ -1,6 +1,12 @@
+export interface CmdResult {
+  stdout: string;
+  success: boolean;
+  stdError: string;
+}
+
 export async function cmd(
   cmd: string[],
-): Promise<{ stdout: string; success: boolean; stdError: string }> {
+): Promise<CmdResult> {
   // create subprocess
   const p = Deno.run({
     cmd,

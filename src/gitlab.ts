@@ -2,6 +2,9 @@ import { Select, Toggle } from "../dependencies/cliffy.deps.ts";
 import { crypto, Path } from "../dependencies/std.deps.ts";
 import { getConfig } from "../src/config.ts";
 import { cmd } from "./cmd.ts";
+import { Git } from "./git.ts";
+
+const git = new Git();
 
 function getAccessToken(): string {
   return getConfig().gitlabApiToken ?? Deno.env.get("GITLAB_API_TOKEN") ?? "";
@@ -12,70 +15,6 @@ function toHexString(bytes: ArrayBuffer): string {
     (str, byte) => str + byte.toString(16).padStart(2, "0"),
     "",
   );
-}
-
-async function getGitRoot() {
-  const resp = await cmd(["git", "rev-parse", "--show-toplevel"]);
-  return resp.success ? resp.stdout.trim() : undefined;
-}
-async function getRemoteBranch(): Promise<string | undefined | void> {
-  const result = await cmd([
-    "git",
-    "rev-parse",
-    "--symbolic-full-name",
-    "--abbrev-ref",
-    "HEAD@{u}",
-  ]);
-  return result.success
-    ? result.stdout.replace("origin/", "").trim()
-    : undefined;
-}
-
-async function getLocalBranch(): Promise<string | undefined | void> {
-  const result = await cmd([
-    "git",
-    "rev-parse",
-    "--symbolic-full-name",
-    "--abbrev-ref",
-    "HEAD",
-  ]);
-  return result.success ? result.stdout.trim() : undefined;
-}
-
-async function getCommitTitle(): Promise<string | void> {
-  const result = await cmd([
-    "git",
-    "show",
-    "--pretty=format:%s",
-    "-s",
-    "HEAD",
-  ]);
-  return (result.success ? result.stdout.trim() : "");
-}
-
-async function getCommitMessageBody(): Promise<string | void> {
-  const result = await cmd([
-    "git",
-    "show",
-    "--pretty=format:%b",
-    "-s",
-    "HEAD",
-  ]);
-  return (result.success ? result.stdout : "");
-}
-
-function createRemoteBranch(branchName: string) {
-  return cmd([
-    "git",
-    "push",
-    "--set-upstream",
-    "origin",
-    branchName,
-  ]);
-}
-
-function gitPush(force: boolean) {
-  return cmd(force ? ["git", "push"] : ["git", "push", "--force"]);
 }
 
 async function projectApiRequest(url: string, config?: RequestInit) {
@@ -224,7 +163,7 @@ async function createMergeRequest(
   config: { draft: boolean },
 ) {
   const reviewerId = await selectReviewer();
-  const title = (config.draft ? "Draft: " : "") + (await getCommitTitle() ??
+  const title = (config.draft ? "Draft: " : "") + (await git.getCommitTitle() ??
     "");
   const targetBranch = await selectTargetBranch();
   if (!targetBranch) {
@@ -239,7 +178,7 @@ async function createMergeRequest(
       source_branch,
       target_branch: targetBranch,
       title,
-      description: (await getCommitMessageBody()) ?? "",
+      description: (await git.getCommitMessageBody()) ?? "",
       reviewer_ids: [reviewerId] || [],
       assignee_id: await getCurrentUserId(),
       labels: getDefaultLabels(),
@@ -251,7 +190,7 @@ async function createMergeRequest(
 }
 
 async function getMergeRequestForCurrentBranch() {
-  const remoteBranch = await getRemoteBranch();
+  const remoteBranch = await git.getRemoteBranch();
   if (remoteBranch) {
     const mrs = await fetchOpenMergeRequestForBranch(remoteBranch);
 
@@ -268,10 +207,10 @@ export async function pushToMergeRequest(
   config: { draft: boolean; force: boolean },
 ) {
   await cmd(["git", "fetch"]);
-  const localBranch = (await getLocalBranch()) ?? "";
-  let remoteBranch = await getRemoteBranch();
+  const localBranch = (await git.getLocalBranch()) ?? "";
+  let remoteBranch = await git.getRemoteBranch();
   if (!remoteBranch) {
-    await createRemoteBranch(localBranch);
+    await git.createRemoteBranch(localBranch);
     remoteBranch = localBranch;
   } else {
     // TODO force ??
@@ -286,17 +225,17 @@ export async function pushToMergeRequest(
 
   if (!mr) {
     // get default labels
-    await gitPush(config.force);
+    await git.gitPush(config.force);
     mr = await createMergeRequest(remoteBranch, config);
   } else {
     await setDraft(config.draft, mr.iid, mr.title);
-    await gitPush(config.force);
+    await git.gitPush(config.force);
   }
   console.log("Merge request: " + mr.web_url);
 }
 
 async function getRemoteFileChangeUrl(filePath: string) {
-  const gitRoot = await getGitRoot();
+  const gitRoot = await git.getGitRoot();
   if (!gitRoot) {
     throw new Error("Not inside a git repository");
   }
