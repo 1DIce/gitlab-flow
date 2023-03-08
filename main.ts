@@ -7,6 +7,7 @@ import { Command, HelpCommand } from "./dependencies/cliffy.deps.ts";
 import { Actions } from "./src/actions.ts";
 import { environment } from "./environment.ts";
 import { GitlabApi } from "./src/gitlab-api.ts";
+import { Git } from "./src/git.ts";
 
 const fs = new FileSystem();
 const git = new Git();
