@@ -1,6 +1,7 @@
 import { Select, Toggle } from "../dependencies/cliffy.deps.ts";
 import { crypto, Path } from "../dependencies/std.deps.ts";
 import { getConfig } from "../src/config.ts";
+import { cmd } from "./cmd.ts";
 
 function getAccessToken(): string {
   return getConfig().gitlabApiToken ?? Deno.env.get("GITLAB_API_TOKEN") ?? "";
@@ -13,47 +14,12 @@ function toHexString(bytes: ArrayBuffer): string {
   );
 }
 
-async function runExternalCmd(
-  cmd: string[],
-): Promise<{ stdout: string; success: boolean; stdError: string }> {
-  // create subprocess
-  const p = Deno.run({
-    cmd,
-    stdout: "piped",
-    stderr: "piped",
-  });
-
-  // Reading the outputs closes their pipes
-  const [status, rawOutput, rawError] = await Promise.all([
-    p.status(),
-    p.output(),
-    p.stderrOutput(),
-  ]);
-
-  if (status.code === 0) {
-    const output = new TextDecoder().decode(rawOutput); // since it's returned as UInt8Array
-    return Promise.resolve({
-      stdout: output,
-      success: true,
-      stdError: "",
-    });
-  } else {
-    const errorString = new TextDecoder().decode(rawError);
-    console.warn("Caught error during api request", errorString);
-    return {
-      stdout: "",
-      success: false,
-      stdError: errorString,
-    };
-  }
-}
-
 async function getGitRoot() {
-  const resp = await runExternalCmd(["git", "rev-parse", "--show-toplevel"]);
+  const resp = await cmd(["git", "rev-parse", "--show-toplevel"]);
   return resp.success ? resp.stdout.trim() : undefined;
 }
 async function getRemoteBranch(): Promise<string | undefined | void> {
-  const result = await runExternalCmd([
+  const result = await cmd([
     "git",
     "rev-parse",
     "--symbolic-full-name",
@@ -66,7 +32,7 @@ async function getRemoteBranch(): Promise<string | undefined | void> {
 }
 
 async function getLocalBranch(): Promise<string | undefined | void> {
-  const result = await runExternalCmd([
+  const result = await cmd([
     "git",
     "rev-parse",
     "--symbolic-full-name",
@@ -77,7 +43,7 @@ async function getLocalBranch(): Promise<string | undefined | void> {
 }
 
 async function getCommitTitle(): Promise<string | void> {
-  const result = await runExternalCmd([
+  const result = await cmd([
     "git",
     "show",
     "--pretty=format:%s",
@@ -88,7 +54,7 @@ async function getCommitTitle(): Promise<string | void> {
 }
 
 async function getCommitMessageBody(): Promise<string | void> {
-  const result = await runExternalCmd([
+  const result = await cmd([
     "git",
     "show",
     "--pretty=format:%b",
@@ -99,7 +65,7 @@ async function getCommitMessageBody(): Promise<string | void> {
 }
 
 function createRemoteBranch(branchName: string) {
-  return runExternalCmd([
+  return cmd([
     "git",
     "push",
     "--set-upstream",
@@ -109,7 +75,7 @@ function createRemoteBranch(branchName: string) {
 }
 
 function gitPush(force: boolean) {
-  return runExternalCmd(force ? ["git", "push"] : ["git", "push", "--force"]);
+  return cmd(force ? ["git", "push"] : ["git", "push", "--force"]);
 }
 
 async function projectApiRequest(url: string, config?: RequestInit) {
@@ -292,7 +258,7 @@ async function getMergeRequestForCurrentBranch() {
     if (mrs?.length > 1) {
       throw new Error("Multiple merge requests found");
     }
-    let mr = mrs?.[0];
+    const mr = mrs?.[0];
     return mr;
   }
   return undefined;
@@ -301,7 +267,7 @@ async function getMergeRequestForCurrentBranch() {
 export async function pushToMergeRequest(
   config: { draft: boolean; force: boolean },
 ) {
-  await runExternalCmd(["git", "fetch"]);
+  await cmd(["git", "fetch"]);
   const localBranch = (await getLocalBranch()) ?? "";
   let remoteBranch = await getRemoteBranch();
   if (!remoteBranch) {
