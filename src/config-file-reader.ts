@@ -1,6 +1,14 @@
 import { GlobalConfig } from "./config.ts";
 import { Path } from "../dependencies/std.deps.ts";
 import { FileSystem } from "./file-system.ts";
+import { environment } from "../environment.ts";
+
+const CONFIG_FILE_NAME = [
+  `.${environment.binaryName}.json`,
+  `${environment.binaryName}.json`,
+  ".gitlab-mr.json",
+  "gitlab-mr.json",
+] as const;
 
 export class ConfigFileReader {
   constructor(private readonly fs: FileSystem) {}
@@ -19,14 +27,16 @@ export class ConfigFileReader {
   }
 
   private isConfigFile(fileName: string): boolean {
-    return fileName === ".gitlab-cli.json";
+    return CONFIG_FILE_NAME.find((validConfigName) =>
+      validConfigName === fileName
+    ) != null;
   }
 
   private getConfigHomePath(): string {
     const xdgHome = Deno.env.get("XDG_CONFIG_HOME");
     return xdgHome
-      ? xdgHome + "/gitlab-cli"
-      : Deno.env.get("HOME") + "/.config/gitlab-cli";
+      ? xdgHome + `/${environment.binaryName}`
+      : Deno.env.get("HOME") + `/.config/${environment.binaryName}`;
   }
 
   private isRootDirectory(path: string): boolean {
@@ -49,8 +59,10 @@ export class ConfigFileReader {
       currentSearchDirectory = Path.dirname(currentSearchDirectory);
     }
 
-    const userHomeConfigPath = this.getConfigHomePath() + "/gitlab-cli.json";
-    if (this.fs.isFileSync(userHomeConfigPath)) {
+    const userHomeConfigPath = this.findConfigFileInDirectory(
+      this.getConfigHomePath(),
+    );
+    if (userHomeConfigPath) {
       return userHomeConfigPath;
     }
 
@@ -58,12 +70,16 @@ export class ConfigFileReader {
     return undefined;
   }
 
-  private findConfigFileInDirectory(directory: string): string {
-    for (const entry of this.fs.readDirSync(directory)) {
-      if (entry.isFile && this.isConfigFile(entry.name)) {
-        return directory + "/" + entry.name;
+  private findConfigFileInDirectory(directory: string): string | undefined {
+    try {
+      for (const entry of this.fs.readDirSync(directory)) {
+        if (entry.isFile && this.isConfigFile(entry.name)) {
+          return directory + "/" + entry.name;
+        }
       }
+    } catch (_) {
+      return undefined;
     }
-    return "";
+    return undefined;
   }
 }
