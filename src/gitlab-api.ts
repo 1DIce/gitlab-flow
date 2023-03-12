@@ -2,13 +2,16 @@ import { getConfig } from "../src/config.ts";
 import {
   CreateMergeRequestRequest,
   GitlabUser,
+  MergeRequestResponse,
   UpdateMrBody,
 } from "./gitlab-api.types.ts";
 
 export class GitlabApi {
-  fetchOpenMergeRequestForBranch(branchName: string): Promise<any[]> {
+  fetchOpenMergeRequestForBranch(
+    SourceBranchName: string,
+  ): Promise<MergeRequestResponse[]> {
     return this.projectApiRequest(
-      "/merge_requests?state=opened&source_branch=" + branchName,
+      "/merge_requests?state=opened&source_branch=" + SourceBranchName,
     );
   }
 

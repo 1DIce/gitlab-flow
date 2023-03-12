@@ -1,12 +1,19 @@
 import { Select, Toggle } from "../dependencies/cliffy.deps.ts";
 import { crypto, Path } from "../dependencies/std.deps.ts";
 import { getConfig } from "../src/config.ts";
+import { UserFriendlyException } from "./exceptions.ts";
+import { ExitCode } from "./exit-code.ts";
 import { Git } from "./git.ts";
 import { GitlabApi } from "./gitlab-api.ts";
 import { CreateMergeRequestRequest } from "./gitlab-api.types.ts";
+import { Output } from "./output.ts";
 
 export class Actions {
-  constructor(private git: Git, private api: GitlabApi) {}
+  constructor(
+    private git: Git,
+    private api: GitlabApi,
+    private out: Output,
+  ) {}
 
   private toHexString(bytes: ArrayBuffer): string {
     return new Uint8Array(bytes).reduce(
@@ -138,7 +145,9 @@ export class Actions {
       const mrs = await this.api.fetchOpenMergeRequestForBranch(remoteBranch);
 
       if (mrs?.length > 1) {
-        throw new Error("Multiple merge requests found");
+        throw new UserFriendlyException(
+          "Multiple open merge requests found for the current remote branch",
+        );
       }
       const mr = mrs?.[0];
       return mr;
@@ -174,7 +183,7 @@ export class Actions {
       await this.setDraft(config.draft, mr.iid, mr.title);
       await this.git.gitPush(config.force);
     }
-    console.log("Merge request: " + mr.web_url);
+    this.out.println("Merge request: " + mr.web_url);
   }
 
   public async getRemoteFileChangeUrl(filePath: string) {
@@ -198,12 +207,20 @@ export class Actions {
 
   public async stdoutRemoteFileChangeUrl(filePath: string) {
     const changeUrl = await this.getRemoteFileChangeUrl(filePath);
-    console.log(changeUrl);
+    this.out.println(changeUrl);
   }
 
-  public async stdoutTargetBranch() {
-    const targetBranch =
-      (await this.getMergeRequestForCurrentBranch())?.target_branch ?? "";
-    console.log(targetBranch);
+  public async stdoutTargetBranch(): Promise<ExitCode> {
+    try {
+      const targetBranch =
+        (await this.getMergeRequestForCurrentBranch())?.target_branch ?? "";
+      if (targetBranch.trim()) {
+        this.out.println(targetBranch);
+      }
+      return ExitCode.SUCCESS;
+    } catch (e) {
+      this.out.exception(e);
+      return ExitCode.FAILIURE;
+    }
   }
 }

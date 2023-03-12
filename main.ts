@@ -8,19 +8,32 @@ import { Actions } from "./src/actions.ts";
 import { environment } from "./environment.ts";
 import { GitlabApi } from "./src/gitlab-api.ts";
 import { Git } from "./src/git.ts";
+import { Output } from "./src/output.ts";
+import { ExitCode } from "./src/exit-code.ts";
 
 const fs = new FileSystem();
 const git = new Git();
 const api = new GitlabApi();
-const actions = new Actions(git, api);
+const out = new Output();
+const actions = new Actions(git, api, out);
 
 function initializeConfig(): void {
   const configFile = new ConfigFileReader(fs).loadConfigFile();
   if (!configFile) {
     console.error("Error: No configuration file was found!");
-    Deno.exit(1);
+    Deno.exit(ExitCode.FAILIURE);
   }
   replaceConfig(configFile);
+}
+
+async function validateIsGitRepo() {
+  const gitRoot = await git.getGitRoot();
+  if (!gitRoot) {
+    out.errorln(
+      "Error: The current working directory is not inside a git directory",
+    );
+    Deno.exit(ExitCode.FAILIURE);
+  }
 }
 
 async function main() {
@@ -44,9 +57,8 @@ async function main() {
     )
     .alias("c")
     .description(
-      `Uploads new changes to merge request.
+      `Create a new merge request with fromt he current git branch.
           A remote branch is created if it does not exist.
-          A merge request is created if it does not exist.
           By default the merge request is marked as a draft,
           `,
     )
@@ -61,9 +73,10 @@ async function main() {
       { conflicts: ["publish"] },
     )
     .action(
-      (params) => {
+      async (params) => {
         initializeConfig();
-        actions.pushToMergeRequest({
+        await validateIsGitRepo();
+        await actions.pushToMergeRequest({
           draft: params.draft != null ? params.draft : !params.publish,
           force: params.force,
         });
@@ -75,22 +88,24 @@ async function main() {
     )
     .alias("fc")
     .description(
-      "Get url to change of the provided file in the open merge request",
+      "Get the url to a change of the provided file in the open merge request",
     )
-    .action((_params, file_path) => {
+    .action(async (_params, file_path) => {
       initializeConfig();
-      actions.stdoutRemoteFileChangeUrl(file_path);
+      await actions.stdoutRemoteFileChangeUrl(file_path);
     })
     .reset()
     .command(
       "target",
     )
     .description(
-      "Get merge request target branch if merge request for the current branch exists",
+      "Output merge request target branch name if merge request for the current branch exists",
     )
-    .action((_params) => {
+    .action(async (_params) => {
       initializeConfig();
-      actions.stdoutTargetBranch();
+      await validateIsGitRepo();
+      const exitCode = await actions.stdoutTargetBranch();
+      Deno.exit(exitCode);
     })
     .command("help", new HelpCommand().global())
     .parse(Deno.args);

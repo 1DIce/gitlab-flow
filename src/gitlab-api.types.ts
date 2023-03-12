@@ -17,3 +17,11 @@ export interface CreateMergeRequestRequest {
   remove_source_branch: boolean;
   squash: boolean;
 }
+
+export interface MergeRequestResponse {
+  target_branch: string;
+  source_branch: string;
+  iid: number;
+  web_url: string;
+  title: string;
+}
