@@ -14,11 +14,9 @@ import { ExitCode } from "./src/exit-code.ts";
 const fs = new FileSystem();
 const git = new Git();
 const api = new GitlabApi();
-const out = new Output();
-const actions = new Actions(git, api, out);
 
-function initializeConfig(): void {
-  const configFile = new ConfigFileReader(fs).loadConfigFile();
+function initializeConfig(out: Output): void {
+  const configFile = new ConfigFileReader(fs, out).loadConfigFile();
   if (!configFile) {
     console.error("Error: No configuration file was found!");
     Deno.exit(ExitCode.FAILIURE);
@@ -26,7 +24,7 @@ function initializeConfig(): void {
   replaceConfig(configFile);
 }
 
-async function validateIsGitRepo() {
+async function validateIsGitRepo(out: Output) {
   const gitRoot = await git.getGitRoot();
   if (!gitRoot) {
     out.errorln(
@@ -47,6 +45,10 @@ async function main() {
       "GITLAB_API_TOKEN=<value:string>",
       "Gitlab API token that is used to authenticate yourself",
     )
+    .option("--debug", "Output debug information", {
+      global: true,
+      default: false,
+    })
     .option(
       "-f, --force",
       "Use force push",
@@ -74,8 +76,10 @@ async function main() {
     )
     .action(
       async (params) => {
-        initializeConfig();
-        await validateIsGitRepo();
+        const out = new Output(params.debug);
+        const actions = new Actions(git, api, out);
+        initializeConfig(out);
+        await validateIsGitRepo(out);
         await actions.pushToMergeRequest({
           draft: params.draft != null ? params.draft : !params.publish,
           force: params.force,
@@ -90,8 +94,10 @@ async function main() {
     .description(
       "Get the url to a change of the provided file in the open merge request",
     )
-    .action(async (_params, file_path) => {
-      initializeConfig();
+    .action(async (params, file_path) => {
+      const out = new Output(params.debug);
+      const actions = new Actions(git, api, out);
+      initializeConfig(out);
       await actions.stdoutRemoteFileChangeUrl(file_path);
     })
     .reset()
@@ -101,9 +107,11 @@ async function main() {
     .description(
       "Output merge request target branch name if merge request for the current branch exists",
     )
-    .action(async (_params) => {
-      initializeConfig();
-      await validateIsGitRepo();
+    .action(async (params) => {
+      const out = new Output(params.debug);
+      const actions = new Actions(git, api, out);
+      initializeConfig(out);
+      await validateIsGitRepo(out);
       const exitCode = await actions.stdoutTargetBranch();
       Deno.exit(exitCode);
     })

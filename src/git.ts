@@ -1,7 +1,11 @@
 import { cmd, CmdResult } from "./cmd.ts";
+import { Output } from "./output.ts";
 
 export class Git {
+  constructor(private out: Output) {}
+
   fetch(): Promise<CmdResult> {
+    this.out.debug("Running 'git fetch'");
     return cmd(["git", "fetch"]);
   }
 

@@ -2,6 +2,7 @@ import { GlobalConfig } from "./config.ts";
 import { Path } from "../dependencies/std.deps.ts";
 import { FileSystem } from "./file-system.ts";
 import { environment } from "../environment.ts";
+import { Output } from "./output.ts";
 
 const CONFIG_FILE_NAME = [
   `.${environment.binaryName}.json`,
@@ -11,12 +12,13 @@ const CONFIG_FILE_NAME = [
 ] as const;
 
 export class ConfigFileReader {
-  constructor(private readonly fs: FileSystem) {}
+  constructor(private readonly fs: FileSystem, private readonly out: Output) {}
 
   public loadConfigFile(): GlobalConfig | undefined {
     const path = this.findConfigFilePath();
     if (path) {
       try {
+        this.out.debug("Loading config from path " + path);
         const loadedConfig = JSON.parse(this.fs.readTextFileSync(path));
         return loadedConfig;
       } catch (e) {
