@@ -7,6 +7,7 @@ import { Git } from "./git.ts";
 import { GitlabApi } from "./gitlab-api.ts";
 import { CreateMergeRequestRequest } from "./gitlab-api.types.ts";
 import { Output } from "./output.ts";
+import { progressSpinner } from "./progress-spinner.ts";
 
 export class Actions {
   constructor(
@@ -158,17 +159,24 @@ export class Actions {
   public async pushToMergeRequest(
     config: { draft: boolean; force: boolean },
   ) {
-    await this.git.fetch();
+    await progressSpinner(this.git.fetch(), "Running git fetch");
+
     const localBranch = (await this.git.getLocalBranch()) ?? "";
     let remoteBranch = await this.getRemoteBranchWithoutPrefix();
     if (!remoteBranch) {
-      await this.git.createRemoteBranch(localBranch);
+      await progressSpinner(
+        this.git.createRemoteBranch(localBranch),
+        "Creating remote branch",
+      );
       remoteBranch = localBranch;
     } else {
       // TODO force ??
     }
 
-    const mrs = await this.api.fetchOpenMergeRequestForBranch(remoteBranch);
+    const mrs = await progressSpinner(
+      this.api.fetchOpenMergeRequestForBranch(remoteBranch),
+      "Fetching open merge requests",
+    );
 
     if (mrs?.length > 1) {
       throw new Error("Multiple merge requests found");
@@ -177,13 +185,19 @@ export class Actions {
 
     if (!mr) {
       // get default labels
-      await this.git.gitPush(config.force);
+      await this.gitPushIfHasUnpushedChanges(config.force);
       mr = await this.createMergeRequest(remoteBranch, config);
     } else {
       await this.setDraft(config.draft, mr.iid, mr.title);
-      await this.git.gitPush(config.force);
+      await this.gitPushIfHasUnpushedChanges(config.force);
     }
     this.out.println("Merge request: " + mr.web_url);
+  }
+
+  private async gitPushIfHasUnpushedChanges(force: boolean) {
+    if (await this.git.hasUnpushedCommits()) {
+      await progressSpinner(this.git.gitPush(force), "Pushing commits");
+    }
   }
 
   public async getRemoteFileChangeUrl(filePath: string) {

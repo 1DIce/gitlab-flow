@@ -64,6 +64,16 @@ export class Git {
     ]);
   }
 
+  async hasUnpushedCommits(): Promise<boolean> {
+    const result = await cmd([
+      "git",
+      "diff",
+      "--exit-code",
+      "HEAD..FETCH_HEAD",
+    ]);
+    return !result.success;
+  }
+
   gitPush(force: boolean): Promise<CmdResult> {
     return cmd(force ? ["git", "push"] : ["git", "push", "--force"]);
   }

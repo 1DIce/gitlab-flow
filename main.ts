@@ -57,7 +57,7 @@ async function main() {
     )
     .alias("c")
     .description(
-      `Create a new merge request with fromt he current git branch.
+      `Create a new merge request with from the current git branch.
           A remote branch is created if it does not exist.
           By default the merge request is marked as a draft,
           `,
